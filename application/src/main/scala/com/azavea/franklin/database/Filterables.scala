@@ -3,8 +3,12 @@ package com.azavea.franklin.database
 import cats.implicits._
 import doobie._
 import doobie.implicits._
-import geotrellis.server.stac.TemporalExtent
+import geotrellis.server.stac.{StacItem, TemporalExtent}
 import geotrellis.vector.Projected
+
+trait FragmentEncoder {
+  
+}
 
 trait FilterHelpers {
 
@@ -50,9 +54,24 @@ trait Filterables extends GeotrellisWktMeta with FilterHelpers {
       }
     }
 
-  implicit val searchFilter: Filterable[Any, SearchFilters] =
-    Filterable[Any, SearchFilters] { searchFilters: SearchFilters =>
-      println(searchFilters)
+  implicit val collectionsFilter: Filterable[Any, List[String]] =
+    Filterable[Any, List[String]] { collections: List[String] =>
+      List(
+        collections.toNel.map(
+          collections => Fragments.in(fr"item #>> '{properties, collection}'", collections)
+        )
+      )
+    }
+
+  implicit final class FragmentEncoderOps[A](private val value: A) extends AnyVal {
+    def wrappedEncodable: A = value
+    final def toFragment(implicit fragmentEncoder: FragmentEncoder[A]): List[Option[Fragment]] = fragmentEncoder(value)
+  }
+
+  implicit val searchFilter: Filterable[StacItem, SearchFilters] =
+    Filterable[StacItem, SearchFilters] { searchFilters: SearchFilters =>
+      val collections = searchFilters.collections
+
       val collectionsFilter: Option[Fragment] = searchFilters.collections.toNel
         .map(
           collections => Fragments.in(fr"item #>> '{properties, collection}'", collections)
